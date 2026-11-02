@@ -21,7 +21,7 @@ export async function classifyTicket(ticketId: string): Promise<void> {
 
   let result = classifyFallback(ticket.subject, firstMessage);
   let source = "FALLBACK";
-  if (llmConfigured()) {
+  if (llmConfigured("CLASSIFY")) {
     try {
       result = await classifyWithLlm(ticket.subject, firstMessage);
       source = "AI";
@@ -72,7 +72,7 @@ async function draftContext(ticketId: string): Promise<{
 
 export async function generateDraft(ticketId: string): Promise<{ draft: string; source: string }> {
   const { ctx, subject, body, category } = await draftContext(ticketId);
-  if (llmConfigured()) {
+  if (llmConfigured("DRAFT")) {
     try {
       const facts = [
         ctx.bookTitle ? `Book: "${ctx.bookTitle}" (status: ${ctx.bookStatus ?? "unknown"})` : "General / account-level query",
