@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { ApiError, errorBody } from "./lib/errors";
 import { authRouter } from "./modules/auth";
 import { authorRouter } from "./modules/author";
+import { authorTicketsRouter } from "./modules/tickets";
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,7 @@ export function createApp() {
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.use("/api/auth", authRouter);
   app.use("/api/me", authorRouter);
+  app.use("/api/me/tickets", authorTicketsRouter);
 
   app.use((_req, _res, next) => next(new ApiError(404, "NOT_FOUND", "Route not found")));
 
