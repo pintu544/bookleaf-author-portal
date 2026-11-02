@@ -5,6 +5,8 @@ import { ApiError, errorBody } from "./lib/errors";
 import { authRouter } from "./modules/auth";
 import { authorRouter } from "./modules/author";
 import { authorTicketsRouter } from "./modules/tickets";
+import { adminRouter } from "./modules/admin";
+import { eventsRouter } from "./modules/events";
 
 export function createApp() {
   const app = express();
@@ -19,6 +21,8 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/me", authorRouter);
   app.use("/api/me/tickets", authorTicketsRouter);
+  app.use("/api/admin", adminRouter);
+  app.use("/api", eventsRouter());
 
   app.use((_req, _res, next) => next(new ApiError(404, "NOT_FOUND", "Route not found")));
 

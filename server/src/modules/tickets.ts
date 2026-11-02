@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../lib/errors";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { publishTicketEvent } from "../lib/events";
 
 /**
  * Ticket endpoints shared shape. Author routes live under /api/me/tickets
@@ -50,6 +51,8 @@ authorTicketsRouter.post("/", async (req, res, next) => {
       },
       include: { book: true, messages: { orderBy: { createdAt: "asc" } } },
     });
+
+    publishTicketEvent("ticket-created", authorId, { ticketId: ticket.id });
 
     // Fire-and-forget classification; failures are swallowed by design
     // (the fallback engine inside classifyTicket covers provider outages).
