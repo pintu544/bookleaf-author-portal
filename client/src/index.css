@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-paper: #faf7f1;
+  --color-paper-deep: #f3ede1;
+  --color-ink: #23201b;
+  --color-ink-soft: #575046;
+  --color-leaf: #2f5d3a;
+  --color-leaf-deep: #24492d;
+  --color-clay: #b4552d;
+  --color-gold: #a97b1f;
+  --color-line: #e3dac9;
+  --color-card: #fffdf8;
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #2f5d3a;
+  color: #faf7f1;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-leaf);
+  outline-offset: 2px;
+}

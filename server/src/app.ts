@@ -11,6 +11,10 @@ export function createApp() {
   app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? true }));
   app.use(express.json({ limit: "1mb" }));
 
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.use("/api/auth", authRouter);
   app.use("/api/me", authorRouter);
