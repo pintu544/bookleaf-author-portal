@@ -1,87 +1,102 @@
-# BookLeaf Author Support & Communication Portal
+# BookLeaf Author Support and Communication Portal
 
-A full-stack support portal for BookLeaf Publishing, built for the BookLeaf Full Stack Developer technical assignment (Nov 2026). Authors check their books and royalties and raise support queries; the BookLeaf team works a live ticket queue where every ticket is auto-classified and prioritised by AI, and every reply starts from an AI draft grounded in the author's real numbers and BookLeaf's own policies.
+This is my submission for the BookLeaf Publishing full stack developer assignment. It is a support portal with two sides. Authors log in, see their books and royalty numbers, and raise queries. The BookLeaf team works through those queries in an admin queue where each ticket gets classified and prioritised automatically, and each reply starts as a draft written from the author's own figures and BookLeaf's policies, which the admin edits before sending.
 
 ## Live demo
 
-- **App:** https://bookleaf-portal-jade.vercel.app
-- **API:** https://bookleaf-portal-api.azurewebsites.net (health: `/health`)
-- **Test credentials** (seeded from the exact dataset provided with the brief):
+- App: https://bookleaf-portal-jade.vercel.app
+- API: https://bookleaf-portal-api.azurewebsites.net (health check at `/health`)
+
+Test accounts, seeded from the dataset that came with the brief:
 
 | Role | Email | Password |
 |---|---|---|
-| Author | priya.sharma@email.com (any of the 10 dataset authors) | `bookleaf123` |
+| Author | priya.sharma@email.com (any of the 10 authors in the dataset works) | `bookleaf123` |
 | Admin | admin@bookleafpub.com | `admin123` |
 
-## What it does
+## What authors get
 
-**Author portal**
-- Login (email/password, JWT); authors can only ever see their own data — scoping is enforced from the token on every route, and another author's ticket reads as a plain 404.
-- **My Books** — every dataset field (title, ISBN, genre, publication date, status, MRP, copies sold, royalty earned / paid / pending, last payout, print partner, platforms), plus a plain-language explainer of the quarterly payout cycle and the ₹1,000 threshold. In-production books (whose MRP and per-copy royalty are genuinely null in the dataset) show a production note instead of invented figures.
-- **Submit Query** — book dropdown or "General / Account Level", subject, description, optional attachment field.
-- **My Tickets** — status (Open / In Progress / Resolved / Closed), the full thread, and near-real-time updates (SSE push with a polling baseline, so a reply appears without refreshing).
+Login is email and password with a JWT. An author only ever sees their own data. The scoping comes from the token on every route, and if an author somehow opens another author's ticket id, the API answers 404, the same as if it did not exist.
 
-**Admin portal**
-- **Ticket Queue** — filterable by status, category, priority and date; sorted urgent-first, then oldest-unresolved, so the tickets that matter surface without hunting.
-- **Ticket Workspace** — full thread with the author's book context alongside; status lifecycle; **override the AI's category/priority** (recorded as a human override, never silently rewritten); assign to me; internal notes that are structurally invisible to authors (the author serializer never includes them, and a test proves it); reply box with **Generate AI draft** — the draft is grounded in the Knowledge Base plus the ticket's real figures, is cached on the ticket, and is always edited by a human before sending.
+My Books shows every field from the dataset: title, ISBN, genre, publication date, status, MRP, copies sold, royalty earned, paid and pending, last payout date, print partner and the platforms the book sells on. Under the summary there is a short note explaining how royalties work, calculated quarterly, paid within 45 days of the quarter ending, and only once the balance crosses ₹1,000. Two books in the dataset are still in production and have no MRP or per copy royalty yet. The page says that plainly instead of showing a made up number.
 
-**API** — REST with consistent plural resources, auth middleware, role-based access control, zod validation on every input, and one error shape everywhere: `{ "error": { "code", "message", "details?" } }` with meaningful HTTP statuses (401 unauthenticated, 403 wrong role, 404 hidden-or-missing, 422 invalid input).
+Submit Query has a dropdown of the author's books plus a General / Account Level option, a subject, a description and an optional attachment field. My Tickets lists the author's queries with their status (Open, In Progress, Resolved, Closed) and the full conversation. Replies from the admin show up without a refresh. The page uses server sent events, with a plain polling fallback underneath for networks that kill long lived connections.
 
-## Architecture
+## What the admin team gets
+
+The queue filters by status, category, priority and date. It sorts urgent tickets first, then the ones that have been waiting longest, because in a real support queue those are the two things that decide what gets picked up next.
+
+Inside a ticket, the admin sees the conversation next to the author's book record, so the numbers are on screen while replying. They can change the status, assign the ticket to themselves, and override the AI's category or priority. An override is recorded as a human decision in the data, with the source shown in the UI, rather than silently replacing what the AI said. Internal notes sit in the same screen but are never sent to the author's side of the API at all. There is a test that proves an author's response cannot contain a note.
+
+The reply box has a Generate AI draft button. The draft opens in a dialog first, where the admin can read it, edit it, regenerate it, or drop it into the reply box. Nothing is ever sent without a person pressing send.
+
+## The API
+
+The API is REST, with auth middleware and role checks on every route, zod validation on every input, and one error format everywhere:
+
+```json
+{ "error": { "code": "INVALID_CREDENTIALS", "message": "Email or password is incorrect" } }
+```
+
+Status codes mean what they should: 401 when there is no valid login, 403 when the role is wrong, 404 when a resource is missing or belongs to someone else, 422 when the input fails validation.
+
+Endpoints: `POST /api/auth/login`, `GET /api/auth/me`, `GET /api/me/profile`, `GET /api/me/books`, `POST` and `GET /api/me/tickets`, `GET /api/me/tickets/:id`, `GET /api/me/events` for the author's event stream, and on the admin side `GET /api/admin/tickets` (with `status`, `category`, `priority`, `from` and `to` filters), `GET` and `PATCH /api/admin/tickets/:id`, `POST /api/admin/tickets/:id/replies`, `POST /api/admin/tickets/:id/notes`, `POST /api/admin/tickets/:id/draft`, and `GET /api/admin/events`.
+
+## How it is built
 
 ```
-client/  React 18 + Vite + TypeScript + Tailwind CSS 4   (author + admin SPAs, one build)
-server/  Node + Express + TypeScript, Prisma ORM
-         SQLite locally (zero-config) → PostgreSQL in production via DATABASE_URL
-         JWT auth (bcrypt password hashing), SSE hub for live updates
-         AI service: LLM provider ⇄ deterministic fallback engine, one interface
+client/  React 18, Vite, TypeScript, Tailwind CSS 4
+server/  Node, Express, TypeScript, Prisma
+         SQLite for local development, PostgreSQL in production through DATABASE_URL
+         JWT auth with bcrypt, server sent events for live updates
 ```
 
-- **One repo, two packages**, deployed independently: the client is a static build; the API is a small Node service. CORS is configured by an origin allowlist.
-- **UI components** — hand-rolled layout in Tailwind with the project's own tokens, plus Radix primitives (Select, Dialog, Toast, Tooltip) in the shadcn style where native controls are weakest: full keyboard navigation and ARIA semantics without giving up the custom design or adding a styled library's visual language.
-- **Data model** — `User` (login identity + role) is separate from `Author` (the dataset's author record), so an admin account needs no author row and an author's data access is derived from the JWT, never from a client-supplied id. Tickets carry `categorySource` / `prioritySource` (`AI` | `FALLBACK` | `ADMIN`) so it is always visible whether a value came from the model, the rules engine, or a human override, plus a cached `aiDraft`.
-- **Real-time** — an in-process SSE hub with per-author and per-admin channels; events are published on ticket create/update/reply. The client also polls as a baseline, so the experience degrades gracefully through proxies that kill long-lived connections. In a multi-instance deployment the hub swaps for Redis pub/sub behind the same publish/subscribe calls.
-- **Seed** — `server/prisma/seed.ts` loads the provided `bookleaf_sample_data.json` verbatim (10 authors, 18 books) and creates the demo logins above. It is idempotent.
+The repo holds two packages that deploy on their own. The client is a static build (Vercel). The API is a small Node service (Azure App Service). CORS takes an origin allowlist from the environment.
 
-## AI integration
+Two data decisions are worth mentioning. The login identity (`User`) is a separate table from the dataset's author record (`Author`), so the admin account needs no author row, and an author's access is derived from their token rather than from any id the client sends. Tickets store where each classification came from (`AI`, `FALLBACK` or `ADMIN`) next to the value itself, so the team can always tell what the model said, what the rules said, and what a person changed.
 
-Two tasks, two models, chosen by measurement rather than habit. I ran a bake-off over the brief's own seven sample queries plus a draft built on a real author's figures, across the Vercel AI Gateway, FastRouter and direct OpenAI (gpt-4o-mini, Claude Haiku 4.5, Gemini 2.5 Flash, Llama 4 Scout):
+For components, the layout is hand written in Tailwind with the project's own colour tokens, and I used Radix primitives (Select, Dialog, Toast, Tooltip) in the shadcn style for the controls where browser defaults are weakest. Dropdowns and dialogs get proper keyboard navigation and ARIA behaviour, and the screens look exactly as designed. I did not use a styled component library because its visual language would have fought the design on a surface this size.
 
-- **Classification + priority → gpt-4o-mini.** Tied-best accuracy (its only miss, like every model's, was the genuinely ambiguous description-update case), the cleanest bare-JSON output, ~1.5 s, ~$0.000036 per ticket.
-- **Draft replies → Claude Haiku 4.5.** Best tone and structure, and the only draft that included the bank-details confirmation the brief's own expected response asks for; ~$0.0018 per draft, generated once and cached per ticket. (The gateway's free tier cannot serve Haiku — 403 — so drafts route via FastRouter, which also serves the classification model; the whole AI layer is env-config, so repointing either task is a one-line change.)
-- **Rejected:** Gemini 2.5 Flash spent most of its token budget on reasoning tokens at cost-conscious settings — 5 of 7 classifications truncated, the draft came back a stub, at ~20× gpt-4o-mini's cost.
+The seed (`server/prisma/seed.ts`) loads the provided `bookleaf_sample_data.json` as it is, 10 authors and 18 books, and creates the demo accounts above. Running it twice changes nothing.
 
-**Prompt strategy.** Classification is a constrained prompt: the exact six categories, the brief's priority criteria verbatim, JSON-only output, and the response is validated against the taxonomy — any off-taxonomy or malformed answer is discarded, never stored. Drafts are grounded in a single Knowledge Base module (royalty maths and quarterly/45-day cycle, ₹1,000 threshold, ISBN escalation, print turnaround and free-reprint rule, distribution windows and re-sync, the nine production stages, and BookLeaf's tone rules) plus the ticket's real figures injected as context. The brief's sample drafts set the shape: acknowledge first, be specific, own faults, give a timeline, end with one next step.
+## The AI part
 
-**Graceful degradation.** Every AI call has a 12-second timeout and fails closed into a **deterministic fallback engine** — keyword classification, rule-based priority that mirrors the brief's criteria (it scores 7/7 on the brief's own samples, including Critical for the six-months-unpaid case and High for the ISBN error), and template drafts assembled from the same Knowledge Base and the author's actual figures. With no API key configured at all, the portal still classifies, prioritises and drafts; the queue simply labels those values as rules-based.
+There are two AI jobs here, classifying tickets and drafting replies, and I picked the models by testing instead of guessing. I ran the brief's own seven sample queries, plus a draft built on a real author's figures, through the models I had access to on three routes (Vercel AI Gateway, FastRouter and OpenAI directly): gpt-4o-mini, Claude Haiku 4.5, Gemini 2.5 Flash and Llama 4 Scout.
 
-**Cost awareness.** Classification is a ~200-token call on a mini-class model (~$0.00004); drafts are the only larger call (~$0.002) and are cached per ticket instead of regenerated. Providers report per-call cost in their usage object, which the server logs. At BookLeaf's stated 1,200+ books/month scale, even a few thousand tickets a month keeps the AI bill in single-digit dollars.
+Classification went to gpt-4o-mini. It tied for the best accuracy, and its only miss was the book description update, which every model got wrong and which is honestly ambiguous between General Inquiry and a metadata issue. It also returned the cleanest JSON and cost about $0.000036 per ticket.
 
-## Run it locally
+Drafts went to Claude Haiku 4.5. Its replies sounded the most like the samples in the brief, and it was the only model that asked the author to confirm her bank details, which the brief's own model answer includes. It costs about $0.0018 per draft, and drafts are generated once and stored on the ticket, so that cost does not repeat. Haiku had one real flaw in testing: it once invented a payout history that contradicted the figures it was given. The production prompt now tells it plainly to use only the figures in front of it and not to speculate about past quarters, and the live drafts have stayed clean since.
+
+Gemini 2.5 Flash did badly enough that I dropped it. At sensible token budgets its reasoning used up most of the allowance, five of seven classifications came back cut off, the draft returned as a stub, and it cost roughly twenty times gpt-4o-mini.
+
+The classification prompt is kept tight on purpose: the six categories, the brief's priority criteria, JSON only. Whatever comes back is checked against the category list before it is stored, and anything off list is thrown away. The draft prompt is grounded in one Knowledge Base module that both the AI path and the fallback path read, so the policy facts (the 80/20 split on net profit, quarterly payment within 45 days, the ₹1,000 threshold, ISBN escalation, print turnaround and the free reprint rule, distribution windows, the nine production stages, and BookLeaf's tone guidance) cannot drift between the two.
+
+That fallback matters. Every AI call has a 12 second timeout, and if the provider is down, slow, rate limited, or simply not configured, a deterministic rules engine does the job instead: keyword based classification, priority rules taken from the brief, and template drafts filled with the author's actual figures. It scores 7 out of 7 on the brief's sample queries, including Critical for the author who had waited six months and High for the ISBN error. With no API key set at all, the portal still classifies, prioritises and drafts. The queue just labels those tickets as rules based.
+
+On cost: classification is a call of about 200 tokens on a small model. Drafts are the only bigger call and they are cached. The server logs the usage object each provider returns, which includes per call cost on these routes. At the volume BookLeaf describes, the AI bill for this system would sit in single digit dollars a month.
+
+## Running it locally
 
 ```bash
-# server (terminal 1)
+# server, first terminal
 cd server
-cp .env.example .env        # set JWT_SECRET; AI keys optional (fallback engine covers you)
+cp .env.example .env        # set JWT_SECRET; the AI keys are optional
 npm install
 npx prisma generate
 npx prisma db push
-npm run seed                # loads the provided dataset + demo logins
+npm run seed
 npm run dev                 # API on http://localhost:4000
 
-# client (terminal 2)
+# client, second terminal
 cd client
 npm install
-npm run dev                 # app on http://localhost:5173 (proxies /api to :4000)
+npm run dev                 # app on http://localhost:5173, /api proxied to :4000
 ```
 
-**Tests** (34, all green): `cd server && npm test` — auth and role enforcement, author scoping (including cross-author book rejection and hidden tickets), the full admin lifecycle, internal-note privacy, fallback classification against the brief's seven samples, draft grounding in real figures, and LLM output parsing.
+## Tests
 
-**API summary** — `POST /api/auth/login`, `GET /api/auth/me`; `GET /api/me/profile`, `GET /api/me/books`; `POST|GET /api/me/tickets`, `GET /api/me/tickets/:id`, `GET /api/me/events` (SSE); `GET /api/admin/tickets` (filters: `status`, `category`, `priority`, `from`, `to`), `GET|PATCH /api/admin/tickets/:id`, `POST /api/admin/tickets/:id/replies`, `POST /api/admin/tickets/:id/notes`, `POST /api/admin/tickets/:id/draft`, `GET /api/admin/events` (SSE).
+`cd server && npm test` runs 34 tests, all passing. They cover login and role enforcement, authors being unable to touch each other's books or tickets, the admin flow from queue to reply to resolved, internal notes staying invisible to authors, the fallback engine against the brief's seven samples, draft grounding in real figures, and the parsing of model output.
 
-## Limitations and what I would do next
+## What is not in here, and what I would add next
 
-- Attachments are UI-only in this build (the brief allows this); production would add object storage with virus scanning and signed URLs.
-- The SSE hub is in-process (single instance); Redis pub/sub is the documented next step, along with ticket search, SLA timers and breach alerts on the queue, and an author-side follow-up message composer (authors currently start a new ticket to reopen a topic).
-- Password reset and email verification are out of scope for the assignment window; the auth layer is shaped so both slot into the existing middleware.
-- The classification prompt could add few-shot examples for the one ambiguous case the bake-off found (profile/description updates that read as metadata but file as General Inquiry).
+Attachments are a field in the form only, which the brief allows. In production they would go to object storage with signed URLs and a scan step. The event hub lives in one process, so it suits a single instance; the publish and subscribe calls are small, and Redis pub/sub is the obvious swap when the API runs on more than one box. The queue would get search and SLA timers next, and authors currently start a fresh ticket to follow up on a closed one, so a follow up composer is on the list. Password reset and email verification are not built; the auth middleware is shaped so both can be added without touching the routes. The one classification case every model missed would get a few worked examples added to the prompt.
