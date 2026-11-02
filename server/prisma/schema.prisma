@@ -1,0 +1,102 @@
+// BookLeaf Author Support & Communication Portal — data model.
+// Types are kept portable (String fields + app-level unions instead of DB
+// enums) so the same schema runs on PostgreSQL in production and SQLite
+// for local development and tests.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String // AUTHOR | ADMIN
+  authorId     String?  @unique
+  author       Author?  @relation(fields: [authorId], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Author {
+  id        String   @id // dataset author_id, e.g. AUTH001
+  name      String
+  email     String   @unique
+  phone     String
+  city      String
+  joinedDate DateTime
+  books     Book[]
+  tickets   Ticket[]
+  user      User?
+}
+
+model Book {
+  id                    String    @id // dataset book_id, e.g. BK001
+  authorId              String
+  author                Author    @relation(fields: [authorId], references: [id])
+  title                 String
+  isbn                  String
+  genre                 String
+  publicationDate       DateTime?
+  status                String // e.g. "Published & Live", "In Production - Typesetting"
+  mrp                   Int? // null while the book is still in production
+  authorRoyaltyPerCopy  Int? // null while the book is still in production
+  totalCopiesSold       Int
+  totalRoyaltyEarned    Int
+  royaltyPaid           Int
+  royaltyPending        Int
+  lastRoyaltyPayoutDate DateTime?
+  printPartner          String?
+  availableOn           String // JSON-encoded string array (portable across DBs)
+  tickets               Ticket[]
+}
+
+model Ticket {
+  id             String          @id @default(cuid())
+  authorId       String
+  author         Author          @relation(fields: [authorId], references: [id])
+  bookId         String?
+  book           Book?           @relation(fields: [bookId], references: [id])
+  subject        String
+  status         String          @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  category       String? // one of the six BookLeaf categories, null until classified
+  categorySource String? // AI | FALLBACK | ADMIN
+  priority       String? // CRITICAL | HIGH | MEDIUM | LOW
+  prioritySource String? // AI | FALLBACK | ADMIN
+  aiDraft        String? // cached AI/fallback draft reply
+  aiDraftSource  String? // AI | FALLBACK
+  assignedToId   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  messages       TicketMessage[]
+  notes          InternalNote[]
+
+  @@index([status, priority, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id])
+  senderRole String // AUTHOR | ADMIN
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model InternalNote {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  adminId   String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
