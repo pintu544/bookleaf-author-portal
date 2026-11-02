@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiFailure, type Book, type BooksResponse, type Ticket } from "../api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { useToast } from "../components/ui/toast";
 
 export default function SubmitTicket() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [books, setBooks] = useState<Book[]>([]);
   const [bookId, setBookId] = useState<string>("general");
   const [subject, setSubject] = useState("");
@@ -29,6 +32,7 @@ export default function SubmitTicket() {
           description: description.trim(),
         }),
       });
+      toast("Query submitted", "The BookLeaf team will reply on your ticket — it updates here automatically.");
       navigate(`/tickets/${res.ticket.id}`, { replace: true });
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : "We could not submit your query. Please try again.");
@@ -52,14 +56,19 @@ export default function SubmitTicket() {
         <label className="block text-sm font-medium" htmlFor="book">
           This query is about
         </label>
-        <select id="book" value={bookId} onChange={(e) => setBookId(e.target.value)} className={field}>
-          <option value="general">General / Account Level</option>
-          {books.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.title}
-            </option>
-          ))}
-        </select>
+        <Select value={bookId} onValueChange={setBookId}>
+          <SelectTrigger id="book" className="mt-1.5 w-full py-2.5">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="general">General / Account Level</SelectItem>
+            {books.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                {b.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <label className="mt-5 block text-sm font-medium" htmlFor="subject">
           Subject

@@ -2,13 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fmtDateTime, getSession } from "../api";
 import { priorityStyle, statusLabel, statusStyle } from "../components/Shell";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Tooltip } from "../components/ui/tooltip";
 
 interface QueueTicket {
   id: string;
   subject: string;
   status: string;
   category: string | null;
+  categorySource: string | null;
   priority: string | null;
+  prioritySource: string | null;
   createdAt: string;
   author: { id: string; name: string; email: string; city: string };
   book: { id: string; title: string } | null;
@@ -58,8 +62,6 @@ export default function AdminQueue() {
     return () => es.close();
   }, [load]);
 
-  const selectCls = "rounded-md border border-line bg-white px-3 py-2 text-sm";
-
   return (
     <div>
       <h1 className="font-display text-2xl font-semibold tracking-tight">Ticket Queue</h1>
@@ -69,28 +71,43 @@ export default function AdminQueue() {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <select aria-label="Filter by status" className={selectCls} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="OPEN">Open</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="RESOLVED">Resolved</option>
-          <option value="CLOSED">Closed</option>
-        </select>
-        <select aria-label="Filter by category" className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">All categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select aria-label="Filter by priority" className={selectCls} value={priority} onChange={(e) => setPriority(e.target.value)}>
-          <option value="">All priorities</option>
-          <option value="CRITICAL">Critical</option>
-          <option value="HIGH">High</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="LOW">Low</option>
-        </select>
+        <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
+          <SelectTrigger aria-label="Filter by status" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="OPEN">Open</SelectItem>
+            <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+            <SelectItem value="RESOLVED">Resolved</SelectItem>
+            <SelectItem value="CLOSED">Closed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? "" : v)}>
+          <SelectTrigger aria-label="Filter by category" className="w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {CATEGORIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={priority || "all"} onValueChange={(v) => setPriority(v === "all" ? "" : v)}>
+          <SelectTrigger aria-label="Filter by priority" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All priorities</SelectItem>
+            <SelectItem value="CRITICAL">Critical</SelectItem>
+            <SelectItem value="HIGH">High</SelectItem>
+            <SelectItem value="MEDIUM">Medium</SelectItem>
+            <SelectItem value="LOW">Low</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {error && (
@@ -118,7 +135,21 @@ export default function AdminQueue() {
                       {t.priority.charAt(0) + t.priority.slice(1).toLowerCase()}
                     </span>
                   )}
-                  <span className="text-xs font-medium text-ink-soft">{t.category ?? "Awaiting classification"}</span>
+                  <Tooltip
+                    label={
+                      t.categorySource === "ADMIN"
+                        ? "Category set by a support team member, overriding the AI"
+                        : t.categorySource === "FALLBACK"
+                          ? "Category assigned by the rules engine (AI unavailable at the time)"
+                          : t.category
+                            ? "Category assigned automatically by AI when the ticket arrived"
+                            : "The AI classifies this ticket moments after it arrives"
+                    }
+                  >
+                    <span className="cursor-default text-xs font-medium text-ink-soft">
+                      {t.category ?? "Awaiting classification"}
+                    </span>
+                  </Tooltip>
                   <span className="ml-auto text-xs text-ink-soft">{fmtDateTime(t.createdAt)}</span>
                 </div>
                 <p className="mt-1.5 font-medium leading-snug">{t.subject}</p>

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fmtDateTime, getSession, inr, type Book, type Ticket, type TicketMessage } from "../api";
 import { priorityStyle, statusLabel, statusStyle } from "../components/Shell";
+import { Dialog, DialogContent } from "../components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { useToast } from "../components/ui/toast";
+import { Tooltip } from "../components/ui/tooltip";
 
 interface AdminTicket extends Ticket {
   author: { id: string; name: string; email: string; city: string; phone: string };
@@ -27,6 +31,9 @@ export default function AdminTicketDetail() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const { toast } = useToast();
 
   const load = useCallback(() => {
     if (!id) return;
@@ -38,13 +45,6 @@ export default function AdminTicketDetail() {
   useEffect(() => {
     load();
   }, [load]);
-
-  // A cached draft (generated when the ticket was opened or last requested)
-  // is offered ready in the reply box for the admin to edit before sending.
-  useEffect(() => {
-    if (ticket?.aiDraft) setReply((current) => current || ticket.aiDraft || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticket?.id, ticket?.aiDraft]);
 
   useEffect(() => {
     const session = getSession();
@@ -69,6 +69,7 @@ export default function AdminTicketDetail() {
     setBusy(true);
     try {
       await api(`/api/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      toast("Ticket updated");
       load();
     } finally {
       setBusy(false);
@@ -80,7 +81,8 @@ export default function AdminTicketDetail() {
     setDraftBusy(true);
     try {
       const res = await api<{ draft: string }>(`/api/admin/tickets/${id}/draft`, { method: "POST" });
-      setReply(res.draft);
+      setDraftText(res.draft);
+      setDraftOpen(true);
     } catch {
       setError("The draft could not be generated just now. You can still write a reply manually.");
     } finally {
@@ -94,6 +96,7 @@ export default function AdminTicketDetail() {
     setBusy(true);
     try {
       await api(`/api/admin/tickets/${id}/replies`, { method: "POST", body: JSON.stringify({ body: reply.trim() }) });
+      toast("Reply sent", "The author can see it on their ticket now.");
       setReply("");
       load();
     } finally {
@@ -107,6 +110,7 @@ export default function AdminTicketDetail() {
     setBusy(true);
     try {
       await api(`/api/admin/tickets/${id}/notes`, { method: "POST", body: JSON.stringify({ body: note.trim() }) });
+      toast("Internal note added", "Only the support team can see it.");
       setNote("");
       load();
     } finally {
@@ -117,7 +121,6 @@ export default function AdminTicketDetail() {
   if (error) return <p role="alert" className="rounded-md bg-clay/10 px-4 py-3 text-clay">{error}</p>;
   if (!ticket) return <p className="text-ink-soft">Loading the ticket…</p>;
 
-  const selectCls = "rounded-md border border-line bg-white px-2.5 py-1.5 text-sm";
   const book = ticket.book;
 
   return (
@@ -138,10 +141,20 @@ export default function AdminTicketDetail() {
                 {ticket.prioritySource === "ADMIN" ? " · overridden" : ""}
               </span>
             )}
-            <span className="text-xs font-medium text-ink-soft">
-              {ticket.category ?? "Awaiting classification"}
-              {ticket.categorySource === "ADMIN" ? " · overridden" : ticket.categorySource === "FALLBACK" ? " · auto (rules)" : ticket.category ? " · by AI" : ""}
-            </span>
+            <Tooltip
+              label={
+                ticket.categorySource === "ADMIN"
+                  ? "A support team member set this, overriding the AI's call"
+                  : ticket.categorySource === "FALLBACK"
+                    ? "Assigned by the deterministic rules engine because the AI was unavailable"
+                    : "Classified automatically by AI when the ticket arrived; the team can override it"
+              }
+            >
+              <span className="cursor-default text-xs font-medium text-ink-soft">
+                {ticket.category ?? "Awaiting classification"}
+                {ticket.categorySource === "ADMIN" ? " · overridden" : ticket.categorySource === "FALLBACK" ? " · auto (rules)" : ticket.category ? " · by AI" : ""}
+              </span>
+            </Tooltip>
           </div>
           <h1 className="mt-2 font-display text-2xl font-semibold leading-snug tracking-tight">{ticket.subject}</h1>
           <p className="mt-1 text-sm text-ink-soft">
@@ -228,54 +241,59 @@ export default function AdminTicketDetail() {
         <aside className="space-y-4">
           <section className="rounded-xl border border-line bg-card p-5">
             <h2 className="text-sm font-semibold">Manage</h2>
-            <label className="mt-3 block text-[13px] font-medium text-ink-soft" htmlFor="status">
+            <label className="mt-3 block text-[13px] font-medium text-ink-soft" id="status-label">
               Status
             </label>
-            <select
-              id="status"
-              className={`${selectCls} mt-1 w-full`}
-              value={ticket.status}
-              disabled={busy}
-              onChange={(e) => patch({ status: e.target.value })}
-            >
-              <option value="OPEN">Open</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="RESOLVED">Resolved</option>
-              <option value="CLOSED">Closed</option>
-            </select>
-            <label className="mt-3 block text-[13px] font-medium text-ink-soft" htmlFor="category">
+            <Select value={ticket.status} disabled={busy} onValueChange={(v) => patch({ status: v })}>
+              <SelectTrigger aria-labelledby="status-label" className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="OPEN">Open</SelectItem>
+                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                <SelectItem value="RESOLVED">Resolved</SelectItem>
+                <SelectItem value="CLOSED">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <label className="mt-3 block text-[13px] font-medium text-ink-soft" id="category-label">
               Category
             </label>
-            <select
-              id="category"
-              className={`${selectCls} mt-1 w-full`}
-              value={ticket.category ?? ""}
+            <Select
+              value={ticket.category ?? "unset"}
               disabled={busy}
-              onChange={(e) => e.target.value && patch({ category: e.target.value })}
+              onValueChange={(v) => v !== "unset" && patch({ category: v })}
             >
-              <option value="">Unclassified</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <label className="mt-3 block text-[13px] font-medium text-ink-soft" htmlFor="priority">
+              <SelectTrigger aria-labelledby="category-label" className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">Unclassified</SelectItem>
+                {CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <label className="mt-3 block text-[13px] font-medium text-ink-soft" id="priority-label">
               Priority
             </label>
-            <select
-              id="priority"
-              className={`${selectCls} mt-1 w-full`}
-              value={ticket.priority ?? ""}
+            <Select
+              value={ticket.priority ?? "unset"}
               disabled={busy}
-              onChange={(e) => e.target.value && patch({ priority: e.target.value })}
+              onValueChange={(v) => v !== "unset" && patch({ priority: v })}
             >
-              <option value="">Unset</option>
-              <option value="CRITICAL">Critical</option>
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low</option>
-            </select>
+              <SelectTrigger aria-labelledby="priority-label" className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">Unset</SelectItem>
+                <SelectItem value="CRITICAL">Critical</SelectItem>
+                <SelectItem value="HIGH">High</SelectItem>
+                <SelectItem value="MEDIUM">Medium</SelectItem>
+                <SelectItem value="LOW">Low</SelectItem>
+              </SelectContent>
+            </Select>
             <button
               type="button"
               disabled={busy}
@@ -305,6 +323,49 @@ export default function AdminTicketDetail() {
           )}
         </aside>
       </div>
+
+      <Dialog open={draftOpen} onOpenChange={setDraftOpen}>
+        <DialogContent
+          title="Review the AI draft"
+          description="Grounded in BookLeaf's Knowledge Base and this author's real figures. Edit it freely — nothing is sent until you put it in the reply and send it yourself."
+        >
+          <textarea
+            rows={12}
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+            className="w-full rounded-md border border-line bg-white px-3 py-2 text-[15px] leading-relaxed"
+            aria-label="AI draft text"
+          />
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setDraftOpen(false)}
+              className="rounded-md border border-line px-4 py-2 text-sm font-semibold hover:bg-paper-deep"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              disabled={draftBusy}
+              onClick={generateDraft}
+              className="rounded-md border border-leaf px-4 py-2 text-sm font-semibold text-leaf hover:bg-leaf/5 disabled:opacity-60"
+            >
+              {draftBusy ? "Drafting…" : "Regenerate"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setReply(draftText);
+                setDraftOpen(false);
+                toast("Draft placed in the reply box", "Give it a final read before sending.");
+              }}
+              className="rounded-md bg-leaf px-4 py-2 text-sm font-semibold text-white hover:bg-leaf-deep"
+            >
+              Use this draft
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -38,6 +38,7 @@ server/  Node + Express + TypeScript, Prisma ORM
 ```
 
 - **One repo, two packages**, deployed independently: the client is a static build; the API is a small Node service. CORS is configured by an origin allowlist.
+- **UI components** — hand-rolled layout in Tailwind with the project's own tokens, plus Radix primitives (Select, Dialog, Toast, Tooltip) in the shadcn style where native controls are weakest: full keyboard navigation and ARIA semantics without giving up the custom design or adding a styled library's visual language.
 - **Data model** — `User` (login identity + role) is separate from `Author` (the dataset's author record), so an admin account needs no author row and an author's data access is derived from the JWT, never from a client-supplied id. Tickets carry `categorySource` / `prioritySource` (`AI` | `FALLBACK` | `ADMIN`) so it is always visible whether a value came from the model, the rules engine, or a human override, plus a cached `aiDraft`.
 - **Real-time** — an in-process SSE hub with per-author and per-admin channels; events are published on ticket create/update/reply. The client also polls as a baseline, so the experience degrades gracefully through proxies that kill long-lived connections. In a multi-instance deployment the hub swaps for Redis pub/sub behind the same publish/subscribe calls.
 - **Seed** — `server/prisma/seed.ts` loads the provided `bookleaf_sample_data.json` verbatim (10 authors, 18 books) and creates the demo logins above. It is idempotent.

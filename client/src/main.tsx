@@ -10,6 +10,8 @@ import AuthorTicketDetail from "./pages/AuthorTicketDetail";
 import SubmitTicket from "./pages/SubmitTicket";
 import AdminQueue from "./pages/AdminQueue";
 import AdminTicketDetail from "./pages/AdminTicketDetail";
+import { ToastProvider } from "./components/ui/toast";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
 
 function HomeRedirect() {
@@ -37,6 +39,10 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <TooltipProvider delayDuration={300}>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    </TooltipProvider>
   </React.StrictMode>,
 );
