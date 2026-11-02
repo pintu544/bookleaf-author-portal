@@ -8,6 +8,8 @@ import AuthorBooks from "./pages/AuthorBooks";
 import AuthorTickets from "./pages/AuthorTickets";
 import AuthorTicketDetail from "./pages/AuthorTicketDetail";
 import SubmitTicket from "./pages/SubmitTicket";
+import AdminQueue from "./pages/AdminQueue";
+import AdminTicketDetail from "./pages/AdminTicketDetail";
 import "./index.css";
 
 function HomeRedirect() {
@@ -26,8 +28,8 @@ const router = createBrowserRouter([
       { path: "/tickets", element: <AuthorTickets /> },
       { path: "/tickets/new", element: <SubmitTicket /> },
       { path: "/tickets/:id", element: <AuthorTicketDetail /> },
-      // Admin surfaces are added in Slice 2.
-      { path: "/admin", element: <div className="text-ink-soft">Admin queue arrives in the next slice.</div> },
+      { path: "/admin", element: <AdminQueue /> },
+      { path: "/admin/tickets/:id", element: <AdminTicketDetail /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
