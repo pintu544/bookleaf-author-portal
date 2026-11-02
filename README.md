@@ -4,7 +4,8 @@ A full-stack support portal for BookLeaf Publishing, built for the BookLeaf Full
 
 ## Live demo
 
-- **App:** _deployed URL added at submission_
+- **App:** https://bookleaf-portal-jade.vercel.app
+- **API:** https://bookleaf-portal-api.azurewebsites.net (health: `/health`)
 - **Test credentials** (seeded from the exact dataset provided with the brief):
 
 | Role | Email | Password |
