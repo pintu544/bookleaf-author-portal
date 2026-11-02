@@ -46,6 +46,7 @@ export interface Ticket {
   priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | null;
   prioritySource: string | null;
   assignedToId: string | null;
+  aiDraft?: string | null;
   createdAt: string;
   updatedAt: string;
   messages: TicketMessage[];

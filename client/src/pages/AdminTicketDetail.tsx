@@ -39,6 +39,13 @@ export default function AdminTicketDetail() {
     load();
   }, [load]);
 
+  // A cached draft (generated when the ticket was opened or last requested)
+  // is offered ready in the reply box for the admin to edit before sending.
+  useEffect(() => {
+    if (ticket?.aiDraft) setReply((current) => current || ticket.aiDraft || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.id, ticket?.aiDraft]);
+
   useEffect(() => {
     const session = getSession();
     if (!session || !id) return;
@@ -128,12 +135,12 @@ export default function AdminTicketDetail() {
             {ticket.priority && (
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityStyle(ticket.priority)}`}>
                 {ticket.priority.charAt(0) + ticket.priority.slice(1).toLowerCase()}
-                {ticket.prioritySource === "OVERRIDDEN" ? " · overridden" : ""}
+                {ticket.prioritySource === "ADMIN" ? " · overridden" : ""}
               </span>
             )}
             <span className="text-xs font-medium text-ink-soft">
               {ticket.category ?? "Awaiting classification"}
-              {ticket.categorySource === "OVERRIDDEN" ? " · overridden" : ticket.category ? " · by AI" : ""}
+              {ticket.categorySource === "ADMIN" ? " · overridden" : ticket.categorySource === "FALLBACK" ? " · auto (rules)" : ticket.category ? " · by AI" : ""}
             </span>
           </div>
           <h1 className="mt-2 font-display text-2xl font-semibold leading-snug tracking-tight">{ticket.subject}</h1>

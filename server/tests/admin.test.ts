@@ -63,8 +63,8 @@ describe("admin ticket management", () => {
       .set("Authorization", `Bearer ${admin}`)
       .send({ category: "Royalty & Payments", priority: "HIGH", assignedToMe: true });
     expect(res.status).toBe(200);
-    expect(res.body.ticket.categorySource).toBe("OVERRIDDEN");
-    expect(res.body.ticket.prioritySource).toBe("OVERRIDDEN");
+    expect(res.body.ticket.categorySource).toBe("ADMIN");
+    expect(res.body.ticket.prioritySource).toBe("ADMIN");
     expect(res.body.ticket.assignedToId).toBeTruthy();
   });
 
@@ -100,6 +100,23 @@ describe("admin ticket management", () => {
       .set("Authorization", `Bearer ${priya}`);
     expect(JSON.stringify(authorView.body)).not.toContain("Escalated to accounts");
     expect(authorView.body.ticket.notes).toBeUndefined();
+  });
+
+  it("generates a grounded draft for the ticket (fallback engine, no LLM in tests)", async () => {
+    const res = await request(app)
+      .post(`/api/admin/tickets/${ticketId}/draft`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({});
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe("FALLBACK");
+    // Priya's real pending royalty from the dataset must appear in the draft.
+    expect(res.body.draft).toContain("₹3,570");
+    expect(res.body.draft).toContain("Dear Priya,");
+
+    const adminView = await request(app)
+      .get(`/api/admin/tickets/${ticketId}`)
+      .set("Authorization", `Bearer ${admin}`);
+    expect(adminView.body.ticket.aiDraft).toContain("₹3,570");
   });
 
   it("updates status through the lifecycle", async () => {

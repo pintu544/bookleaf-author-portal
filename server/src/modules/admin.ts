@@ -5,6 +5,7 @@ import { ApiError } from "../lib/errors";
 import { publishTicketEvent } from "../lib/events";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { CATEGORIES, PRIORITIES, TICKET_STATUSES, type TicketStatus } from "../lib/types";
+import { generateDraft } from "../ai/classify";
 
 /**
  * Admin ticket management: filtered queue, full ticket view (including
@@ -106,8 +107,8 @@ adminRouter.patch("/tickets/:id", async (req, res, next) => {
         ...(status ? { status: status as TicketStatus } : {}),
         // A human changing the AI's call is recorded as an override so the
         // queue can show where the AI was corrected.
-        ...(category ? { category, categorySource: "OVERRIDDEN" } : {}),
-        ...(priority ? { priority, prioritySource: "OVERRIDDEN" } : {}),
+        ...(category ? { category, categorySource: "ADMIN" } : {}),
+        ...(priority ? { priority, prioritySource: "ADMIN" } : {}),
         ...(assignedToMe ? { assignedToId: req.user!.userId } : {}),
       },
     });
@@ -136,6 +137,20 @@ adminRouter.post("/tickets/:id/replies", async (req, res, next) => {
     }
     publishTicketEvent("message-added", ticket.authorId, { ticketId: ticket.id, messageId: message.id });
     res.status(201).json({ message });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.post("/tickets/:id/draft", async (req, res, next) => {
+  try {
+    const ticket = await loadTicket(req.params.id);
+    const { draft, source } = await generateDraft(ticket.id);
+    await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { aiDraft: draft, aiDraftSource: source },
+    });
+    res.json({ draft, source });
   } catch (err) {
     next(err);
   }
