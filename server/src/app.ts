@@ -19,10 +19,14 @@ export function createApp() {
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
   app.use("/api/auth", authRouter);
+  // The SSE routes authenticate with a query token (EventSource cannot set
+  // headers), so they must be matched before the header-auth routers that
+  // own the /api/me and /api/admin prefixes — otherwise every event stream
+  // is rejected with 401 before it reaches its own auth check.
+  app.use("/api", eventsRouter());
   app.use("/api/me", authorRouter);
   app.use("/api/me/tickets", authorTicketsRouter);
   app.use("/api/admin", adminRouter);
-  app.use("/api", eventsRouter());
 
   app.use((_req, _res, next) => next(new ApiError(404, "NOT_FOUND", "Route not found")));
 
