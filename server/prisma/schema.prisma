@@ -1,7 +1,7 @@
 // BookLeaf Author Support & Communication Portal — data model.
 // Types are kept portable (String fields + app-level unions instead of DB
-// enums) so the same schema runs on PostgreSQL in production and SQLite
-// for local development and tests.
+// enums) so the schema can move to PostgreSQL with a provider change; as
+// shipped it runs on SQLite for local development, tests and the demo.
 
 generator client {
   provider = "prisma-client-js"

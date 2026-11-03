@@ -34,16 +34,21 @@ export default function AdminQueue() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [priority, setPriority] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (category) params.set("category", category);
     if (priority) params.set("priority", priority);
+    if (from) params.set("from", from);
+    // The To date means the whole of that day, not its first instant.
+    if (to) params.set("to", `${to}T23:59:59.999`);
     api<{ tickets: QueueTicket[] }>(`/api/admin/tickets?${params.toString()}`)
       .then((r) => setTickets(r.tickets))
       .catch(() => setError("We could not load the queue just now."));
-  }, [status, category, priority]);
+  }, [status, category, priority, from, to]);
 
   useEffect(() => {
     load();
@@ -108,6 +113,26 @@ export default function AdminQueue() {
             <SelectItem value="LOW">Low</SelectItem>
           </SelectContent>
         </Select>
+        <label className="flex items-center gap-2 text-sm text-ink-soft">
+          From
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            aria-label="Filter by start date"
+            className="rounded-md border border-line bg-card px-3 py-2 text-sm text-ink"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ink-soft">
+          To
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            aria-label="Filter by end date"
+            className="rounded-md border border-line bg-card px-3 py-2 text-sm text-ink"
+          />
+        </label>
       </div>
 
       {error && (

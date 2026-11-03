@@ -1,6 +1,8 @@
 import request from "supertest";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
+import { classifyTicket } from "../src/ai/classify";
+import { prisma } from "../src/lib/prisma";
 
 const app = createApp();
 
@@ -126,5 +128,77 @@ describe("admin ticket management", () => {
       .send({ status: "RESOLVED" });
     expect(res.status).toBe(200);
     expect(res.body.ticket.status).toBe("RESOLVED");
+  });
+});
+
+describe("classification override guard and queue date filters", () => {
+  let admin: string;
+  let ticketId: string;
+
+  beforeAll(async () => {
+    admin = await login("admin@bookleafpub.com", "admin123");
+    const author = await prisma.author.findUniqueOrThrow({
+      where: { email: "priya.sharma@email.com" },
+    });
+    // Created straight in the database so no classification has run yet:
+    // this is the state a ticket is in while the model is still answering.
+    const ticket = await prisma.ticket.create({
+      data: {
+        authorId: author.id,
+        subject: "Where is my royalty for this quarter",
+        messages: {
+          create: { senderRole: "AUTHOR", body: "My royalty has not arrived yet. Please check." },
+        },
+      },
+    });
+    ticketId = ticket.id;
+  });
+
+  it("filters the queue by date range", async () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const inRange = await request(app)
+      .get(`/api/admin/tickets?from=${encodeURIComponent(past)}`)
+      .set("Authorization", `Bearer ${admin}`);
+    expect(inRange.status).toBe(200);
+    expect(inRange.body.tickets.some((t: { id: string }) => t.id === ticketId)).toBe(true);
+
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    const outOfRange = await request(app)
+      .get(`/api/admin/tickets?from=${encodeURIComponent(future)}`)
+      .set("Authorization", `Bearer ${admin}`);
+    expect(outOfRange.status).toBe(200);
+    expect(outOfRange.body.tickets.some((t: { id: string }) => t.id === ticketId)).toBe(false);
+  });
+
+  it("never lets a late classification overwrite an admin priority correction", async () => {
+    const patch = await request(app)
+      .patch(`/api/admin/tickets/${ticketId}`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ priority: "LOW" });
+    expect(patch.status).toBe(200);
+
+    await classifyTicket(ticketId);
+
+    const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    expect(after.priority).toBe("LOW");
+    expect(after.prioritySource).toBe("ADMIN");
+    // The field nobody contested is still classified.
+    expect(after.category).toBeTruthy();
+    expect(after.categorySource).toBe("FALLBACK");
+  });
+
+  it("leaves a fully corrected ticket untouched", async () => {
+    await request(app)
+      .patch(`/api/admin/tickets/${ticketId}`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ category: "General Inquiry" });
+
+    await classifyTicket(ticketId);
+
+    const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    expect(after.category).toBe("General Inquiry");
+    expect(after.categorySource).toBe("ADMIN");
+    expect(after.priority).toBe("LOW");
+    expect(after.prioritySource).toBe("ADMIN");
   });
 });

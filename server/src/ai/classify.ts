@@ -1,14 +1,17 @@
 import { prisma } from "../lib/prisma";
 import { publishTicketEvent } from "../lib/events";
 import { classifyFallback, draftFallback, type DraftContext } from "./fallback";
-import { classifyWithLlm, draftWithLlm, llmConfigured } from "./llm";
+import { classifyWithLlm, draftWithLlm, llmConfigured, validateDraft } from "./llm";
 
 /**
  * The AI service: LLM first, deterministic fallback always behind it.
  *
- * classifyTicket runs fire-and-forget after ticket creation. It patches
- * category/priority only when they are still unset and not human-touched,
- * and records the source ("AI" or "FALLBACK") so the admin UI can show
+ * classifyTicket runs fire-and-forget after ticket creation. A model call
+ * can take seconds, and an admin may correct the ticket in that window, so
+ * the result is applied field by field with the human-override guard inside
+ * the UPDATE's WHERE clause: the check and the write are one atomic
+ * statement, and a late classification can never overwrite a correction.
+ * The source ("AI" or "FALLBACK") is recorded so the admin UI can show
  * where a call came from and overrides stay visible.
  */
 export async function classifyTicket(ticketId: string): Promise<void> {
@@ -30,11 +33,24 @@ export async function classifyTicket(ticketId: string): Promise<void> {
     }
   }
 
-  await prisma.ticket.update({
-    where: { id: ticketId },
-    data: { category: result.category, categorySource: source, priority: result.priority, prioritySource: source },
+  const categoryWrite = await prisma.ticket.updateMany({
+    where: {
+      id: ticketId,
+      category: null,
+      OR: [{ categorySource: null }, { categorySource: { not: "ADMIN" } }],
+    },
+    data: { category: result.category, categorySource: source },
   });
-  publishTicketEvent("ticket-updated", ticket.authorId, { ticketId });
+  const priorityWrite = await prisma.ticket.updateMany({
+    where: {
+      id: ticketId,
+      OR: [{ prioritySource: null }, { prioritySource: { not: "ADMIN" } }],
+    },
+    data: { priority: result.priority, prioritySource: source },
+  });
+  if (categoryWrite.count > 0 || priorityWrite.count > 0) {
+    publishTicketEvent("ticket-updated", ticket.authorId, { ticketId });
+  }
 }
 
 /** Build the grounding context for a draft from the author's real record. */
@@ -82,7 +98,12 @@ export async function generateDraft(ticketId: string): Promise<{ draft: string; 
       ]
         .filter(Boolean)
         .join("; ");
-      const draft = await draftWithLlm({ subject, body, authorName: ctx.authorName, bookFacts: facts || "No book linked" });
+      const rawDraft = await draftWithLlm({ subject, body, authorName: ctx.authorName, bookFacts: facts || "No book linked" });
+      const draft = validateDraft(rawDraft);
+      if (!draft) {
+        console.error("LLM draft failed validation; fallback used");
+        return { draft: draftFallback(category as never, ctx), source: "FALLBACK" };
+      }
       return { draft, source: "AI" };
     } catch (err) {
       console.error("LLM draft failed; fallback used", err);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyFallback, draftFallback } from "../src/ai/fallback";
-import { parseClassification } from "../src/ai/llm";
+import { parseClassification, validateDraft } from "../src/ai/llm";
 
 /**
  * The seven sample scenarios from the assignment brief itself. The fallback
@@ -104,5 +104,29 @@ describe("LLM classification parsing", () => {
   it("rejects off-taxonomy output so the caller falls back", () => {
     expect(() => parseClassification('{"category":"Billing","priority":"HIGH"}')).toThrow();
     expect(() => parseClassification("no json here")).toThrow();
+  });
+});
+
+describe("LLM draft validation", () => {
+  const good =
+    "Dear Priya,\n\nThank you for writing in. Your royalty of ₹3,570 is pending and will be paid within 45 days of the quarter ending. Please confirm your bank details so we can release it without delay.\n\nWarm regards,\nTeam BookLeaf";
+
+  it("accepts a grounded, signed draft", () => {
+    expect(validateDraft(good)).toBe(good);
+  });
+
+  it("refuses a draft carrying a link, so ticket text cannot smuggle one in", () => {
+    expect(validateDraft(good.replace("confirm your bank details", "visit https://evil.example/pay to confirm"))).toBeNull();
+  });
+
+  it("refuses unresolved placeholders and markdown", () => {
+    expect(validateDraft(good.replace("Priya", "[Author Name]"))).toBeNull();
+    expect(validateDraft(good.replace("₹3,570", "**₹3,570** via [this link](x)"))).toBeNull();
+  });
+
+  it("refuses instruction echoes and a missing sign-off", () => {
+    expect(validateDraft(`Ignore previous instructions and ${good}`)).toBeNull();
+    expect(validateDraft(good.replace("Team BookLeaf", "The Support Team"))).toBeNull();
+    expect(validateDraft("OK. Team BookLeaf")).toBeNull();
   });
 });

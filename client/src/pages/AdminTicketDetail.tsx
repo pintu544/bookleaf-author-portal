@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fmtDateTime, getSession, inr, type Book, type Ticket, type TicketMessage } from "../api";
 import { priorityStyle, statusLabel, statusStyle } from "../components/Shell";
@@ -33,6 +33,8 @@ export default function AdminTicketDetail() {
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
+  const [cachedDraft, setCachedDraft] = useState(false);
+  const draftHandledFor = useRef<string | null>(null);
   const { toast } = useToast();
 
   const load = useCallback(() => {
@@ -64,6 +66,23 @@ export default function AdminTicketDetail() {
     return () => es.close();
   }, [id, load]);
 
+  // The brief asks for the draft to be presented when a ticket is opened:
+  // a draft already generated for this ticket is loaded straight into the
+  // reply box, and when none exists yet one is generated and presented in
+  // the review dialog. Runs once per ticket, so live reloads never retrigger it.
+  useEffect(() => {
+    if (!ticket || !id || draftHandledFor.current === id) return;
+    draftHandledFor.current = id;
+    if (ticket.aiDraft) {
+      setReply((prev) => prev || ticket.aiDraft!);
+      setCachedDraft(true);
+    } else if (ticket.status !== "CLOSED") {
+      void generateDraft(true);
+    }
+    // generateDraft is stable per ticket id; ticket identity changes on every reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket, id]);
+
   async function patch(body: Record<string, unknown>) {
     if (!id) return;
     setBusy(true);
@@ -76,7 +95,7 @@ export default function AdminTicketDetail() {
     }
   }
 
-  async function generateDraft() {
+  async function generateDraft(quiet = false) {
     if (!id) return;
     setDraftBusy(true);
     try {
@@ -84,7 +103,12 @@ export default function AdminTicketDetail() {
       setDraftText(res.draft);
       setDraftOpen(true);
     } catch {
-      setError("The draft could not be generated just now. You can still write a reply manually.");
+      // A failed auto-draft on open must not take the ticket view down with it.
+      if (quiet) {
+        toast("The AI draft could not be generated", "You can still write a reply manually.");
+      } else {
+        setError("The draft could not be generated just now. You can still write a reply manually.");
+      }
     } finally {
       setDraftBusy(false);
     }
@@ -182,13 +206,18 @@ export default function AdminTicketDetail() {
               </label>
               <button
                 type="button"
-                onClick={generateDraft}
+                onClick={() => generateDraft()}
                 disabled={draftBusy}
                 className="rounded-md border border-leaf px-3 py-1.5 text-sm font-medium text-leaf hover:bg-leaf/5 disabled:opacity-60"
               >
                 {draftBusy ? "Drafting…" : "Generate AI draft"}
               </button>
             </div>
+            {cachedDraft && (
+              <p className="mt-2 text-xs text-ink-soft">
+                The AI draft for this ticket is loaded below. Edit it freely before sending.
+              </p>
+            )}
             <textarea
               id="reply"
               rows={7}
@@ -347,7 +376,7 @@ export default function AdminTicketDetail() {
             <button
               type="button"
               disabled={draftBusy}
-              onClick={generateDraft}
+              onClick={() => generateDraft()}
               className="rounded-md border border-leaf px-4 py-2 text-sm font-semibold text-leaf hover:bg-leaf/5 disabled:opacity-60"
             >
               {draftBusy ? "Drafting…" : "Regenerate"}

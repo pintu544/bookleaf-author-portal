@@ -28,7 +28,7 @@ The queue filters by status, category, priority and date. It sorts urgent ticket
 
 Inside a ticket, the admin sees the conversation next to the author's book record, so the numbers are on screen while replying. They can change the status, assign the ticket to themselves, and override the AI's category or priority. An override is recorded as a human decision in the data, with the source shown in the UI, rather than silently replacing what the AI said. Internal notes sit in the same screen but are never sent to the author's side of the API at all. There is a test that proves an author's response cannot contain a note.
 
-The reply box has a Generate AI draft button. The draft opens in a dialog first, where the admin can read it, edit it, regenerate it, or drop it into the reply box. Nothing is ever sent without a person pressing send.
+Opening a ticket presents its AI draft, as the brief asks: a draft already generated for the ticket is loaded straight into the reply box, and a ticket without one gets a draft generated on open and shown in a review dialog. Either way the admin can read it, edit it, regenerate it, or write their own. Nothing is ever sent without a person pressing send.
 
 ## The API
 
@@ -47,7 +47,8 @@ Endpoints: `POST /api/auth/login`, `GET /api/auth/me`, `GET /api/me/profile`, `G
 ```
 client/  React 18, Vite, TypeScript, Tailwind CSS 4
 server/  Node, Express, TypeScript, Prisma
-         SQLite for local development, PostgreSQL in production through DATABASE_URL
+         SQLite through Prisma for local development, tests and the live demo;
+         PostgreSQL in production is a provider change in schema.prisma plus migrations
          JWT auth with bcrypt, server sent events for live updates
 ```
 
@@ -71,7 +72,7 @@ A second round then put the current flagship models through the same prompts and
 
 Gemini 2.5 Flash did badly enough that I dropped it. At sensible token budgets its reasoning used up most of the allowance, five of seven classifications came back cut off, the draft returned as a stub, and it cost roughly twenty times gpt-4o-mini.
 
-The classification prompt is kept tight on purpose: the six categories, the brief's priority criteria, JSON only. Whatever comes back is checked against the category list before it is stored, and anything off list is thrown away. The draft prompt is grounded in one Knowledge Base module that both the AI path and the fallback path read, so the policy facts (the 80/20 split on net profit, quarterly payment within 45 days, the ₹1,000 threshold, ISBN escalation, print turnaround and the free reprint rule, distribution windows, the nine production stages, and BookLeaf's tone guidance) cannot drift between the two.
+The classification prompt is kept tight on purpose: the six categories, the brief's priority criteria, JSON only. Whatever comes back is checked against the category list before it is stored, and anything off list is thrown away. Drafts are validated the same way, because the ticket text is an author's own words and cannot be trusted as instructions: a draft carrying a link, markdown, an unresolved placeholder or an echoed instruction is refused, the rules based draft takes its place, and a classification that finishes after an admin has corrected the ticket can no longer overwrite the correction. The draft prompt is grounded in one Knowledge Base module that both the AI path and the fallback path read, so the policy facts (the 80/20 split on net profit, quarterly payment within 45 days, the ₹1,000 threshold, ISBN escalation, print turnaround and the free reprint rule, distribution windows, the nine production stages, and BookLeaf's tone guidance) cannot drift between the two.
 
 That fallback matters. Every AI call has a 12 second timeout, and if the provider is down, slow, rate limited, or simply not configured, a deterministic rules engine does the job instead: keyword based classification, priority rules taken from the brief, and template drafts filled with the author's actual figures. It scores 7 out of 7 on the brief's sample queries, including Critical for the author who had waited six months and High for the ISBN error. With no API key set at all, the portal still classifies, prioritises and drafts. The queue just labels those tickets as rules based.
 
@@ -97,7 +98,7 @@ npm run dev                 # app on http://localhost:5173, /api proxied to :400
 
 ## Tests
 
-`cd server && npm test` runs 34 tests, all passing. They cover login and role enforcement, authors being unable to touch each other's books or tickets, the admin flow from queue to reply to resolved, internal notes staying invisible to authors, the fallback engine against the brief's seven samples, draft grounding in real figures, and the parsing of model output.
+`cd server && npm test` runs 41 tests, all passing. They cover login and role enforcement, authors being unable to touch each other's books or tickets, the admin flow from queue to reply to resolved, the queue's date filters, internal notes staying invisible to authors, the fallback engine against the brief's seven samples, draft grounding in real figures, the parsing and validation of model output, and a classification that lands late never overwriting an admin's correction.
 
 ## What is not in here, and what I would add next
 
