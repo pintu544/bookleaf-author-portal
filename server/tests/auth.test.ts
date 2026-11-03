@@ -63,4 +63,16 @@ describe("author scoping", () => {
     expect(res.status).toBe(200); // author route allows AUTHOR
     expect(res.body.author.id).toBe("AUTH001");
   });
+
+  it("throttles repeated failed logins for one account only", async () => {
+    for (let i = 0; i < 10; i++) {
+      const res = await login("victim@example.com", "nope");
+      expect(res.status).toBe(401);
+    }
+    const blocked = await login("victim@example.com", "nope");
+    expect(blocked.status).toBe(429);
+    // A different account from the same address is not locked out.
+    const other = await login("someone-else@example.com", "nope");
+    expect(other.status).toBe(401);
+  });
 });

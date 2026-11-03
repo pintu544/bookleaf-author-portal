@@ -98,7 +98,7 @@ npm run dev                 # app on http://localhost:5173, /api proxied to :400
 
 ## Tests
 
-`cd server && npm test` runs 41 tests, all passing. They cover login and role enforcement, authors being unable to touch each other's books or tickets, the admin flow from queue to reply to resolved, the queue's date filters, internal notes staying invisible to authors, the fallback engine against the brief's seven samples, draft grounding in real figures, the parsing and validation of model output, and a classification that lands late never overwriting an admin's correction.
+`cd server && npm test` runs 42 tests, all passing. They cover login and role enforcement, login throttling, authors being unable to touch each other's books or tickets, the admin flow from queue to reply to resolved, the queue's date filters, internal notes staying invisible to authors, the fallback engine against the brief's seven samples, draft grounding in real figures, the parsing and validation of model output, and a classification that lands late never overwriting an admin's correction.
 
 ## What is not in here, and what I would add next
 

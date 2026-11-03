@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, fmtDateTime, type Ticket } from "../api";
+import { api, fmtDateTime, getSession, type Ticket } from "../api";
 import { priorityStyle, statusLabel, statusStyle } from "../components/Shell";
 
 export default function AuthorTicketDetail() {
@@ -17,12 +17,31 @@ export default function AuthorTicketDetail() {
 
   useEffect(() => {
     load();
-    // Near-real-time: poll quietly so an admin reply appears without a
-    // manual refresh (the server also offers an SSE stream; polling is the
-    // resilient baseline that works through every proxy).
+    // Poll quietly as the baseline so an admin reply appears without a
+    // manual refresh even on networks that kill long lived connections.
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Server sent events on top of the poll: an admin reply lands the moment
+  // it is sent, not at the next poll tick.
+  useEffect(() => {
+    const session = getSession();
+    if (!session || !id) return;
+    const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+    const es = new EventSource(`${base}/api/me/events?token=${encodeURIComponent(session.token)}`);
+    const refresh = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { ticketId?: string };
+        if (!data.ticketId || data.ticketId === id) load();
+      } catch {
+        load();
+      }
+    };
+    es.addEventListener("message-added", refresh);
+    es.addEventListener("ticket-updated", refresh);
+    return () => es.close();
+  }, [id, load]);
 
   if (error) return <p role="alert" className="rounded-md bg-clay/10 px-4 py-3 text-clay">{error}</p>;
   if (!ticket) return <p className="text-ink-soft">Loading your ticket…</p>;
